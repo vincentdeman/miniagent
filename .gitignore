@@ -1,0 +1,8 @@
+# miniagent memory
+.miniagent/
+
+# Claude utils
+.claude/
+
+# Cache files
+*/__pycache__/
