@@ -4,7 +4,7 @@
 Ollama backend (native /api/chat). Tools: run_bash, read_file, write_file.
 Memory via memory.py: recall before each turn, extract after.
 
-    ollama pull qwen3:4b
+    ollama pull ornith:9b
     python miniagent.py
 """
 
