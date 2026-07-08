@@ -15,7 +15,8 @@ import sys
 import time
 from pathlib import Path
 
-DB = Path(os.environ.get("MINIAGENT_MEMORY_DB", ".miniagent/memory.db"))  # project-local; override to relocate
+DB = Path(os.environ.get("MINIAGENT_MEMORY_DB",
+                         Path(__file__).resolve().parent.parent / ".miniagent" / "memory.db"))  # project root; override to relocate
 DB.parent.mkdir(parents=True, exist_ok=True)
 DEBUG = bool(os.environ.get("MINIAGENT_DEBUG"))
 
