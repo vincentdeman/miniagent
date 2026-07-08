@@ -6,3 +6,7 @@
 
 # Cache files
 */__pycache__/
+
+# Results and reviews
+*_results.csv
+reviews/
