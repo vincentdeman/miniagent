@@ -244,7 +244,9 @@ def run_agent(work, model, prompt, think, timeout):
     the agent spawned; capturing pipes can hang past `timeout` while a child is open.
     """
     env = {**os.environ, "MINIAGENT_MODEL": model, "MINIAGENT_THINK": str(int(think)),
-           "MINIAGENT_AUTO_CONFIRM": "1", "MINIAGENT_MAX_ROUNDS": MAX_ROUNDS}
+           "MINIAGENT_AUTO_CONFIRM": "1", "MINIAGENT_MAX_ROUNDS": MAX_ROUNDS,
+           # scratch memory DB: no recall from earlier attempts, no writes to the real DB
+           "MINIAGENT_MEMORY_DB": os.path.join(work, ".miniagent", "memory.db")}
     p = subprocess.Popen([PY, AGENT, "--prompt", prompt], cwd=work, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True)
