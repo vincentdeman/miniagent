@@ -2,6 +2,9 @@
 """Persistent memory for miniagent. Stdlib only: SQLite FTS5 + BM25, no network.
 
 API: store, recall, format_block, extract_and_store.
+One shared DB; memories are scoped to the working directory they were made in,
+except GLOBAL_TYPES (user preferences), which surface everywhere. recall() sees
+the current scope plus globals.
 To move to vLLM embeddings later, touch only store() (fill `emb`) and recall()
 (cosine over `emb`, or merge with BM25); schema and API stay put.
 """
@@ -17,11 +20,13 @@ from pathlib import Path
 
 DB = Path(os.environ.get("MINIAGENT_MEMORY_DB",
                          Path(__file__).resolve().parent.parent / ".miniagent" / "memory.db"))  # project root; override to relocate
+SCOPE = os.environ.get("MINIAGENT_SCOPE") or os.getcwd()  # project = where the agent runs
 DEBUG = bool(os.environ.get("MINIAGENT_DEBUG"))
 
 # tunables
 TYPE_WEIGHT = {"preference": 1.2, "error_pattern": 1.15, "decision": 1.1, "fact": 1.0}
 NO_DECAY = {"preference", "error_pattern"}   # exempt from recency decay
+GLOBAL_TYPES = {"preference"}                # stored scope='global': visible from every project
 HALFLIFE_DAYS = 30.0
 DECAY_FLOOR = 0.35
 FTS_CANDIDATES = 4        # fetch k*this from FTS, then re-rank
@@ -37,11 +42,16 @@ def _conn():
         type TEXT NOT NULL,
         text TEXT NOT NULL,
         norm TEXT NOT NULL,
+        scope TEXT NOT NULL DEFAULT 'global',
         emb BLOB,                          -- reserved: embeddings upgrade
         created REAL NOT NULL,
         accessed REAL NOT NULL,
         hits INTEGER NOT NULL DEFAULT 0,
         superseded INTEGER NOT NULL DEFAULT 0)""")
+    try:                                   # pre-scope DBs: migrate, old rows become global
+        c.execute("ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'")
+    except sqlite3.OperationalError:
+        pass
     c.execute("CREATE INDEX IF NOT EXISTS idx_norm ON memories(norm)")
     c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(text)")
     return c
@@ -62,12 +72,13 @@ def store(text, mtype="fact"):
     if not text:
         return
     mtype = mtype if mtype in TYPE_WEIGHT else "fact"
+    scope = "global" if mtype in GLOBAL_TYPES else SCOPE
     norm = _norm(text)
     now = time.time()
     c = _conn()
 
-    dup = c.execute("SELECT id FROM memories WHERE norm=? AND superseded=0",
-                    (norm,)).fetchone()
+    dup = c.execute("SELECT id FROM memories WHERE norm=? AND superseded=0 "
+                    "AND scope IN (?, 'global')", (norm, SCOPE)).fetchone()
     if dup:                                            # exact restatement -> touch
         c.execute("UPDATE memories SET accessed=?, hits=hits+1 WHERE id=?", (now, dup[0]))
         c.commit()
@@ -80,13 +91,14 @@ def store(text, mtype="fact"):
             cand = c.execute(
                 "SELECT m.id, bm25(mem_fts) FROM mem_fts JOIN memories m "
                 "ON m.id=mem_fts.rowid WHERE mem_fts MATCH ? AND m.type=? "
-                "AND m.superseded=0 ORDER BY bm25(mem_fts) LIMIT 1",
-                (fq, mtype)).fetchone()
+                "AND m.superseded=0 AND m.scope IN (?, 'global') "
+                "ORDER BY bm25(mem_fts) LIMIT 1",
+                (fq, mtype, SCOPE)).fetchone()
             if cand and -cand[1] >= SUPERSEDE_REL:
                 c.execute("UPDATE memories SET superseded=1 WHERE id=?", (cand[0],))
 
-    mid = c.execute("INSERT INTO memories(type,text,norm,created,accessed) "
-                    "VALUES(?,?,?,?,?)", (mtype, text, norm, now, now)).lastrowid
+    mid = c.execute("INSERT INTO memories(type,text,norm,scope,created,accessed) "
+                    "VALUES(?,?,?,?,?,?)", (mtype, text, norm, scope, now, now)).lastrowid
     c.execute("INSERT INTO mem_fts(rowid, text) VALUES(?,?)", (mid, text))
     c.commit()
     c.close()
@@ -101,8 +113,9 @@ def recall(query, k=6):
     rows = c.execute(
         "SELECT m.id, m.type, m.text, m.accessed, bm25(mem_fts) FROM mem_fts "
         "JOIN memories m ON m.id=mem_fts.rowid WHERE mem_fts MATCH ? "
-        "AND m.superseded=0 ORDER BY bm25(mem_fts) LIMIT ?",
-        (fq, k * FTS_CANDIDATES)).fetchall()
+        "AND m.superseded=0 AND m.scope IN (?, 'global') "
+        "ORDER BY bm25(mem_fts) LIMIT ?",
+        (fq, SCOPE, k * FTS_CANDIDATES)).fetchall()
 
     scored = []
     for mid, mtype, text, accessed, bm in rows:

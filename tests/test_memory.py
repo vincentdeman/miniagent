@@ -36,6 +36,7 @@ class MemoryTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         memory.DB = Path(self.tmp) / "memory.db"
+        memory.SCOPE = "/proj/alpha"                   # fixed scope: tests don't depend on cwd
         memory._conn().close()                         # create schema; no-op tests query it too
 
     def tearDown(self):
@@ -136,6 +137,50 @@ class MemoryTest(unittest.TestCase):
         backdate("borealis", days=365)
         got = memory.recall("legacy cluster name")
         self.assertTrue(any("borealis" in txt for _, txt in got))
+
+    # --- scoping: facts stay in their project, preferences are global ---
+
+    def test_project_fact_invisible_from_other_scope(self):
+        memory.store("the deploy bucket is zx-flumen-47", "fact")
+        memory.SCOPE = "/proj/beta"
+        self.assertEqual(memory.recall("deploy bucket"), [])
+
+    def test_preference_visible_from_every_scope(self):
+        memory.store("use black for formatting", "preference")
+        memory.SCOPE = "/proj/beta"
+        got = memory.recall("formatting preference")
+        self.assertEqual(got, [("preference", "use black for formatting")])
+
+    def test_dedup_is_scope_local(self):
+        memory.store("the linter config lives in setup.cfg", "fact")
+        memory.SCOPE = "/proj/beta"
+        memory.store("the linter config lives in setup.cfg", "fact")
+        self.assertEqual(rows("SELECT COUNT(*) FROM memories")[0][0], 2)
+
+    def test_supersede_cannot_cross_scopes(self):
+        self._seed()
+        memory.store("we decided to deploy to region eu-west-1 for latency", "decision")
+        memory.SCOPE = "/proj/beta"
+        memory.store("we decided to deploy to region ap-south-2 for latency", "decision")
+        self.assertEqual(rows("SELECT COUNT(*) FROM memories WHERE superseded=1")[0][0], 0)
+
+    def test_pre_scope_db_migrates_rows_to_global(self):
+        c = sqlite3.connect(memory.DB)                 # rebuild the pre-scope schema
+        c.execute("DROP TABLE memories")
+        c.execute("""CREATE TABLE memories(
+            id INTEGER PRIMARY KEY, type TEXT NOT NULL, text TEXT NOT NULL,
+            norm TEXT NOT NULL, emb BLOB, created REAL NOT NULL,
+            accessed REAL NOT NULL, hits INTEGER NOT NULL DEFAULT 0,
+            superseded INTEGER NOT NULL DEFAULT 0)""")
+        c.execute("INSERT INTO memories(type,text,norm,created,accessed) "
+                  "VALUES('fact','legacy row about widgets','legacy row about widgets',0,0)")
+        c.execute("INSERT INTO mem_fts(rowid, text) VALUES(1, 'legacy row about widgets')")
+        c.commit()
+        c.close()
+        memory.store("fresh fact about sprockets", "fact")   # triggers migration
+        self.assertEqual(rows("SELECT scope FROM memories ORDER BY id"),
+                         [("global",), ("/proj/alpha",)])
+        self.assertTrue(memory.recall("legacy widgets"))     # old rows stay visible
 
     # --- extract_and_store (stubbed chat; no LLM) ---
 

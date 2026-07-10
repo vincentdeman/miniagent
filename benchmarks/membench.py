@@ -54,8 +54,15 @@ SCENARIOS = [
 ]
 
 
-def seed_distractors(db, n=40):
+def _adopt(db):
+    """Point the in-process memory module at an attempt's DB, matching the
+    scope the agent subprocess uses (its cwd, i.e. the work dir)."""
     memory.DB = Path(db)
+    memory.SCOPE = os.path.realpath(memory.DB.parent.parent)  # agent's getcwd() is resolved
+
+
+def seed_distractors(db, n=40):
+    _adopt(db)
     for i in range(n):
         memory.store(f"service worker-{i} listens on port {7000 + i} and logs to /var/log/w{i}.log")
 
@@ -76,7 +83,7 @@ def db_contains(db, token):
 
 def recalled(db, probe, expect):
     """True if recall(probe) — exactly what system_msg runs — surfaces every token."""
-    memory.DB = Path(db)
+    _adopt(db)
     mems = memory.recall(probe)
     return all(any(tok in txt for _, txt in mems) for tok in expect)
 
