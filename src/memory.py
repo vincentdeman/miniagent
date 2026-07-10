@@ -17,7 +17,6 @@ from pathlib import Path
 
 DB = Path(os.environ.get("MINIAGENT_MEMORY_DB",
                          Path(__file__).resolve().parent.parent / ".miniagent" / "memory.db"))  # project root; override to relocate
-DB.parent.mkdir(parents=True, exist_ok=True)
 DEBUG = bool(os.environ.get("MINIAGENT_DEBUG"))
 
 # tunables
@@ -31,6 +30,7 @@ MIN_TERM_LEN = 3          # drop shorter query tokens
 
 
 def _conn():
+    DB.parent.mkdir(parents=True, exist_ok=True)       # lazy: honors post-import DB reassignment
     c = sqlite3.connect(DB)
     c.execute("""CREATE TABLE IF NOT EXISTS memories(
         id INTEGER PRIMARY KEY,
