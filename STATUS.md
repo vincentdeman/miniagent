@@ -1,7 +1,8 @@
 # Status
 
 "Implemented" requires cited evidence; queue items carry the measurement that
-proves them done.
+proves them done. All LLM-dependent results are model-specific — here
+ornith 1.0 9B (`ornith:9b`, think-on); only the unit tests are model-independent.
 
 ## Implemented
 
