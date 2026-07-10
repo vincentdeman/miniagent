@@ -75,6 +75,10 @@ def read_file(path: str) -> str:
 def write_file(path: str, content: str) -> str:
     try:
         p = Path(path).expanduser()
+        if p.exists():                                 # creating is safe; clobbering needs consent
+            print(f"\n  \033[33moverwrite {p} ({len(content)} bytes)\033[0m")
+            if not AUTO_CONFIRM and input("  overwrite? [y/N] ").strip().lower() != "y":
+                return "User declined to overwrite the file."
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
         return f"wrote {len(content)} bytes to {p}"
