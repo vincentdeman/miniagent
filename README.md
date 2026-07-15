@@ -22,6 +22,15 @@ conda activate miniagent
 ollama pull ornith:9b
 ```
 
+**Context length.** Ollama defaults to a 4096-token context; too small a
+context truncates tool schemas and breaks tool-calling. miniagent raises it
+per request (`MINIAGENT_NUM_CTX`, default 32768). `opencode` can't, so it runs
+a derived model with the context baked in — the name marks it as opencode's:
+
+```bash
+ollama create ornith-9b-opencode -f opencode.Modelfile   # opencode.json points here
+```
+
 ## Usage
 
 Independent steps; all need `ollama serve` running.
