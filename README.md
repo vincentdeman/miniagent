@@ -42,11 +42,12 @@ flash-attention on): ornith fits whole; qwen keeps ~5 of its 40 expert-layers on
 GPU (`--n-cpu-moe 35`), the rest in system RAM. Context and expert-offload trade
 off against the same VRAM — see the hardware notes for the math.
 
-**Ollama (fallback).** Serves `ornith:9b` only — the MoE default isn't practical
-in Ollama, so the fallback needs `ollama pull ornith:9b` and
-`MINIAGENT_MODEL=ornith:9b`. Ollama defaults to a 4096-token context, which
-truncates tool schemas and breaks tool-calling, so miniagent raises it per
-request (`MINIAGENT_NUM_CTX`, default 32768).
+**Ollama (fallback).** When no llama-server is up, the agent falls back to Ollama
+serving `ornith:9b` automatically — the model is coupled to the backend
+(llama → `qwen3.6`, ollama → `ornith:9b`; override with `MINIAGENT_MODEL`), since
+the MoE default isn't practical in Ollama. Just `ollama pull ornith:9b`. Ollama
+defaults to a 4096-token context, which truncates tool schemas and breaks
+tool-calling, so miniagent raises it per request (`MINIAGENT_NUM_CTX`, default 32768).
 
 `opencode` points at the same llama-server (`opencode.json`, OpenAI `/v1`).
 

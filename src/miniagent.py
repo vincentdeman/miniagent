@@ -19,7 +19,9 @@ from pathlib import Path
 
 import memory
 
-MODEL = os.environ.get("MINIAGENT_MODEL", "qwen3.6")
+MODEL = os.environ.get("MINIAGENT_MODEL")  # explicit override; else per-backend default below
+LLAMA_MODEL = os.environ.get("MINIAGENT_LLAMA_MODEL", "qwen3.6")     # default on llama-server
+OLLAMA_MODEL = os.environ.get("MINIAGENT_OLLAMA_MODEL", "ornith:9b")  # default on the Ollama fallback
 OLLAMA_URL = os.environ.get("MINIAGENT_BASE_URL", "http://localhost:11434")
 LLAMA_URL = os.environ.get("MINIAGENT_LLAMA_URL", "http://localhost:8081")
 BACKEND = os.environ.get("MINIAGENT_BACKEND")  # force "llama"/"ollama"; unset = prefer a live llama-server, else fall back to Ollama
@@ -60,6 +62,11 @@ def _backend():
     return _active
 
 
+def active_model():
+    """The model for the resolved backend: explicit override, else the per-backend default."""
+    return MODEL or (LLAMA_MODEL if _backend()[0] == "llama" else OLLAMA_MODEL)
+
+
 def llm(messages, tools=None, temperature=0.2, max_tokens=None):
     """POST to the chat endpoint; return the assistant message dict.
 
@@ -68,8 +75,9 @@ def llm(messages, tools=None, temperature=0.2, max_tokens=None):
     flags instead, so those don't appear here.
     """
     backend, base_url = _backend()
+    model = active_model()
     if backend == "llama":
-        body = {"model": MODEL, "messages": messages, "stream": False,
+        body = {"model": model, "messages": messages, "stream": False,
                 "temperature": temperature}
         if max_tokens:
             body["max_tokens"] = max_tokens
@@ -78,7 +86,7 @@ def llm(messages, tools=None, temperature=0.2, max_tokens=None):
         opts = {"temperature": temperature, "num_ctx": NUM_CTX}
         if max_tokens:
             opts["num_predict"] = max_tokens            # native's name for the output cap
-        body = {"model": MODEL, "messages": messages, "stream": False, "options": opts}
+        body = {"model": model, "messages": messages, "stream": False, "options": opts}
         path, pick = "/api/chat", lambda d: d["message"]
     if tools:
         body["tools"] = tools
@@ -188,7 +196,7 @@ def main():
         memory.extract_and_store(llm, args.prompt, reply)
         return
 
-    print(f"miniagent · {MODEL} · {_backend()[0]} · type 'exit' to quit\n")
+    print(f"miniagent · {active_model()} · {_backend()[0]} · type 'exit' to quit\n")
     history = []
     while True:
         try:
