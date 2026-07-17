@@ -8,7 +8,7 @@ bundle. A strong model then reads the bundle and scores each artifact against it
 
 Rule: never judge with the model under test — self-grading is biased.
 
-    python judge.py --model qwen3:4b --out reviews/
+    python judge.py --model ornith:9b --out reviews/
     # then have Claude read reviews/<model>.md and score each artifact
 """
 

@@ -1,0 +1,12 @@
+{
+  "ornith:9b": {
+    "gguf": "~/models/ornith-1.0-9b-Q4_K_M.gguf",
+    "port": 8080,
+    "args": ["-ngl", "99", "--flash-attn", "on", "-c", "32768", "--parallel", "1"]
+  },
+  "qwen3.6": {
+    "gguf": "~/models/Qwen3.6-35B-A3B-Q4_K_M.gguf",
+    "port": 8081,
+    "args": ["-ngl", "99", "--n-cpu-moe", "35", "--flash-attn", "on", "-c", "131072", "--parallel", "1"]
+  }
+}

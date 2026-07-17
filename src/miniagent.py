@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Minimal Claude-Code-style local agent. Fully local, closed loop, stdlib only.
 
-Ollama backend (native /api/chat). Tools: run_bash, read_file, write_file.
+Backend: a live llama-server (OpenAI /v1) if one is up, else Ollama (native
+/api/chat). Tools: run_bash, read_file, write_file.
 Memory via memory.py: recall before each turn, extract after.
 
-    ollama pull ornith:9b
+    python scripts/serve.py qwen3.6      # default model; or ornith:9b. Ollama (ornith) is the fallback
     python miniagent.py
 """
 
@@ -18,8 +19,10 @@ from pathlib import Path
 
 import memory
 
-MODEL = os.environ.get("MINIAGENT_MODEL", "ornith:9b")
-BASE_URL = os.environ.get("MINIAGENT_BASE_URL", "http://localhost:11434")
+MODEL = os.environ.get("MINIAGENT_MODEL", "qwen3.6")
+OLLAMA_URL = os.environ.get("MINIAGENT_BASE_URL", "http://localhost:11434")
+LLAMA_URL = os.environ.get("MINIAGENT_LLAMA_URL", "http://localhost:8081")
+BACKEND = os.environ.get("MINIAGENT_BACKEND")  # force "llama"/"ollama"; unset = prefer a live llama-server, else fall back to Ollama
 NUM_CTX = int(os.environ.get("MINIAGENT_NUM_CTX", "32768"))  # context window; Ollama defaults to 4096
 MAX_HISTORY = 20      # live window; durable content persists in memory
 MAX_TOOL_ROUNDS = int(os.environ.get("MINIAGENT_MAX_ROUNDS", "10"))  # cap tool loops so a misbehaving model can't spin forever
@@ -37,19 +40,53 @@ Durable facts are remembered automatically across sessions; don't manage memory 
 """
 
 
+_active = None  # resolved (backend, base_url), cached after the first probe
+
+
+def _backend():
+    """Pick the backend once and cache it: honor an explicit MINIAGENT_BACKEND,
+    else prefer a live llama-server and fall back to Ollama."""
+    global _active
+    if _active is not None:
+        return _active
+    if BACKEND in ("llama", "ollama"):
+        _active = (BACKEND, LLAMA_URL if BACKEND == "llama" else OLLAMA_URL)
+    else:
+        try:                                           # llama-server answers /health once it's ready
+            urllib.request.urlopen(f"{LLAMA_URL}/health", timeout=2)
+            _active = ("llama", LLAMA_URL)
+        except Exception:
+            _active = ("ollama", OLLAMA_URL)
+    return _active
+
+
 def llm(messages, tools=None, temperature=0.2, max_tokens=None):
-    """POST to the chat endpoint; return the assistant message dict."""
-    opts = {"temperature": temperature, "num_ctx": NUM_CTX}
-    if max_tokens:
-        opts["num_predict"] = max_tokens                # native's name for the output cap
-    body = {"model": MODEL, "messages": messages, "stream": False, "options": opts}
+    """POST to the chat endpoint; return the assistant message dict.
+
+    Same tool-call shape on both backends. Ollama takes context per request
+    (num_ctx); llama-server sets context/flash-attn/KV-quant as server launch
+    flags instead, so those don't appear here.
+    """
+    backend, base_url = _backend()
+    if backend == "llama":
+        body = {"model": MODEL, "messages": messages, "stream": False,
+                "temperature": temperature}
+        if max_tokens:
+            body["max_tokens"] = max_tokens
+        path, pick = "/v1/chat/completions", lambda d: d["choices"][0]["message"]
+    else:
+        opts = {"temperature": temperature, "num_ctx": NUM_CTX}
+        if max_tokens:
+            opts["num_predict"] = max_tokens            # native's name for the output cap
+        body = {"model": MODEL, "messages": messages, "stream": False, "options": opts}
+        path, pick = "/api/chat", lambda d: d["message"]
     if tools:
         body["tools"] = tools
     req = urllib.request.Request(
-        f"{BASE_URL}/api/chat", data=json.dumps(body).encode(),
+        f"{base_url}{path}", data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=300) as r:
-        return json.load(r)["message"]
+        return pick(json.load(r))
 
 
 def run_bash(command: str) -> str:
@@ -151,7 +188,7 @@ def main():
         memory.extract_and_store(llm, args.prompt, reply)
         return
 
-    print(f"miniagent · {MODEL} · type 'exit' to quit\n")
+    print(f"miniagent · {MODEL} · {_backend()[0]} · type 'exit' to quit\n")
     history = []
     while True:
         try:
@@ -170,7 +207,7 @@ def main():
         try:
             reply, history = turn(system, history)
         except Exception as e:
-            print(f"\033[31m! {e}\033[0m  (is `ollama serve` running?)\n")
+            print(f"\033[31m! {e}\033[0m  (is the {_backend()[0]} server running?)\n")
             history.pop()
             continue
         history = history[-MAX_HISTORY:]              # trim live window...

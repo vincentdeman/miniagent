@@ -1,14 +1,16 @@
 # Status
 
 "Implemented" requires cited evidence; queue items carry the measurement that
-proves them done. All LLM-dependent results are model-specific — here
-ornith 1.0 9B (`ornith:9b`, think-on); only the unit tests are model-independent.
+proves them done. All LLM-dependent results are model-specific. The default model
+is now Qwen3.6-35B-A3B (results below); the tables here are the `ornith:9b`
+(think-on) baseline, which remains the lighter dense alternative. Only the unit
+tests are model-independent.
 
 ## Implemented
 
 | Capability | Evidence |
 |---|---|
-| Agent loop: Ollama tool-calling, tool-round cap, history trim | `minibench.py` pass@1 0.83, pass@k 1.0 (ornith:9b think-on, 2026-07) |
+| Agent loop: tool-calling, tool-round cap, history trim | `minibench.py` pass@1 0.83, pass@k 1.0 (ornith:9b think-on, 2026-07) |
 | Open-ended skills (refactor, diagnose, review, document, test-design) | `judge.py` bundle 5/5, scored by a separate strong model |
 | Tool gating: `run_bash` always confirms, `write_file` on overwrite, fails closed without stdin | `tests/test_miniagent.py` |
 | Memory: BM25 recall, type weights, recency decay with floor, dedup | `tests/test_memory.py` |
@@ -16,6 +18,21 @@ ornith 1.0 9B (`ornith:9b`, think-on); only the unit tests are model-independent
 | Scoping: facts per working dir, preferences global, pre-scope DBs migrate | unit tests |
 | Cross-session extract → recall → use, robust to 40 distractors | membench verbatim/noise 2/2 |
 | Bench isolation: attempts never touch the real memory DB | scratch `MINIAGENT_MEMORY_DB` per attempt |
+
+## Second model: Qwen3.6-35B-A3B (MoE) — 2026-07-17
+
+35B-A3B (3B active) run via the CUDA llama-server backend, experts offloaded to
+RAM on the 8GB GPU (`--n-cpu-moe 35`, 128K ctx, think-on; see `models.json`).
+
+| Capability | Evidence |
+|---|---|
+| Agent loop / minibench | pass@1 0.86, pass@k 0.92, p50 38.8s (n=3, 12 tasks). Only miss: `regex-engine` 0/3 all TIMEOUT@300s — latency, not capability (`json-roundtrip`, comparable difficulty, 3/3). `timefmt` 1/3 is a real edge-case miss. |
+| Open-ended skills (judge) | 5/5, scored by a separate strong model (`reviews/qwen3.6-thinking.md`) |
+| Throughput | ~29 tok/s @128K, matching dense ornith @32K despite the RAM offload (A3B) |
+
+vs `ornith:9b`: comparable correctness (0.86 vs 0.83 pass@1; both 5/5 judge) at 4×
+the context and the same speed. The lower pass@k (0.92 vs 1.0) is a single latency
+timeout, not a reasoning gap.
 
 ## Measured limits
 

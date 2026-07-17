@@ -5,8 +5,10 @@ API: store, recall, format_block, extract_and_store.
 One shared DB; memories are scoped to the working directory they were made in,
 except GLOBAL_TYPES (user preferences), which surface everywhere. recall() sees
 the current scope plus globals.
-To move to vLLM embeddings later, touch only store() (fill `emb`) and recall()
-(cosine over `emb`, or merge with BM25); schema and API stay put.
+To add semantic recall later, touch only store() (fill `emb`) and recall()
+(cosine over `emb`, or merge with BM25); schema and API stay put. Get embeddings
+from the backend already running — llama.cpp `/v1/embeddings` or Ollama
+`/api/embeddings` with a small embed model — no separate server needed.
 """
 
 import json

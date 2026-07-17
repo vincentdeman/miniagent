@@ -1,4 +1,0 @@
-FROM ornith:9b
-# opencode drives Ollama over the OpenAI-compatible /v1 endpoint, which can't
-# set num_ctx per request; bake it in so tool schemas aren't truncated.
-PARAMETER num_ctx 32768

@@ -6,7 +6,7 @@ scratch dir, with env MINIAGENT_MODEL, MINIAGENT_THINK (0/1),
 MINIAGENT_AUTO_CONFIRM, MINIAGENT_MAX_ROUNDS. The agent disables its own
 chain-of-thought when THINK is 0.
 
-    python benchmarks/minibench.py --models ornith:9b,qwen3:4b --n 3 --csv benchmarks/minibench_results.csv
+    python benchmarks/minibench.py --models ornith:9b --n 3 --csv benchmarks/minibench_results.csv
 """
 
 import argparse, os, signal, subprocess, sys, tempfile, time, shutil
