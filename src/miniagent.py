@@ -26,6 +26,7 @@ OLLAMA_URL = os.environ.get("MINIAGENT_BASE_URL", "http://localhost:11434")
 LLAMA_URL = os.environ.get("MINIAGENT_LLAMA_URL", "http://localhost:8081")
 BACKEND = os.environ.get("MINIAGENT_BACKEND")  # force "llama"/"ollama"; unset = prefer a live llama-server, else fall back to Ollama
 NUM_CTX = int(os.environ.get("MINIAGENT_NUM_CTX", "32768"))  # context window; Ollama defaults to 4096
+LLAMA_TEMP = float(os.environ.get("MINIAGENT_TEMP", "1.0"))  # Qwen3.6 recommended temp on the llama backend
 MAX_HISTORY = 20      # live window; durable content persists in memory
 MAX_TOOL_ROUNDS = int(os.environ.get("MINIAGENT_MAX_ROUNDS", "10"))  # cap tool loops so a misbehaving model can't spin forever
 AUTO_CONFIRM = os.environ.get("MINIAGENT_AUTO_CONFIRM") == "1"       # skip the run_bash prompt (non-interactive use)
@@ -67,23 +68,26 @@ def active_model():
     return MODEL or (LLAMA_MODEL if _backend()[0] == "llama" else OLLAMA_MODEL)
 
 
-def llm(messages, tools=None, temperature=0.2, max_tokens=None):
+def llm(messages, tools=None, temperature=None, max_tokens=None):
     """POST to the chat endpoint; return the assistant message dict.
 
     Same tool-call shape on both backends. Ollama takes context per request
     (num_ctx); llama-server sets context/flash-attn/KV-quant as server launch
-    flags instead, so those don't appear here.
+    flags instead, so those don't appear here. temperature=None → the backend's
+    default (Qwen3.6-recommended on llama); callers needing determinism pass 0.
     """
     backend, base_url = _backend()
     model = active_model()
     if backend == "llama":
+        # Qwen3.6 recommended sampling (model card); low temp makes Qwen3 repeat.
         body = {"model": model, "messages": messages, "stream": False,
-                "temperature": temperature}
+                "temperature": LLAMA_TEMP if temperature is None else temperature,
+                "top_p": 0.95, "top_k": 20, "min_p": 0.0}
         if max_tokens:
             body["max_tokens"] = max_tokens
         path, pick = "/v1/chat/completions", lambda d: d["choices"][0]["message"]
     else:
-        opts = {"temperature": temperature, "num_ctx": NUM_CTX}
+        opts = {"temperature": 0.2 if temperature is None else temperature, "num_ctx": NUM_CTX}
         if max_tokens:
             opts["num_predict"] = max_tokens            # native's name for the output cap
         body = {"model": model, "messages": messages, "stream": False, "options": opts}

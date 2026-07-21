@@ -65,7 +65,8 @@ or `ollama serve` (fallback).
    - `run_bash` confirms every command, `write_file` confirms overwrites;
      `MINIAGENT_AUTO_CONFIRM=1` skips both.
    - Env overrides: `MINIAGENT_MODEL`, `_BACKEND`, `_LLAMA_URL`, `_BASE_URL`
-     (Ollama), `_NUM_CTX`, `_THINK`, `_MAX_ROUNDS`, `_MEMORY_DB`, `_SCOPE`.
+     (Ollama), `_NUM_CTX`, `_TEMP` (llama sampling temp), `_THINK`,
+     `_MAX_ROUNDS`, `_MEMORY_DB`, `_SCOPE`.
 
 2. **Run one prompt**
 
